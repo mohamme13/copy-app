@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ماسح الكتب الذكي</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://unpkg.com/tesseract.js@v2.1.0/dist/tesseract.min.js"></script>
+    
+    <style>
+        :root {
+            --primary: #2481cc;
+            --bg: #f0f2f5;
+            --card-bg: rgba(255, 255, 255, 0.9);
+            --text: #333;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #121212;
+                --card-bg: rgba(30, 30, 30, 0.9);
+                --text: #e0e0e0;
+            }
+        }
+
+        body {
+            font-family: 'Cairo', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0; padding: 15px;
+            display: flex; justify-content: center;
+        }
+
+        .container {
+            width: 100%; max-width: 450px;
+            background: var(--card-bg);
+            backdrop-filter: blur(10px);
+            border-radius: 20px; padding: 25px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            border: 1px solid rgba(255,255,255,0.1);
+            text-align: center;
+        }
+
+        .upload-area {
+            border: 2px dashed var(--primary);
+            border-radius: 15px;
+            padding: 30px;
+            margin: 20px 0;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        .upload-area:hover { background: rgba(36, 129, 204, 0.05); }
+
+        #preview-img {
+            max-width: 100%;
+            border-radius: 10px;
+            margin-top: 15px;
+            display: none;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, var(--primary), #4ea1db);
+            color: white; border: none; padding: 15px;
+            border-radius: 12px; cursor: pointer; width: 100%;
+            font-size: 17px; font-weight: bold; margin-top: 10px;
+            display: flex; justify-content: center; align-items: center; gap: 10px;
+        }
+
+        #result-area {
+            background: rgba(0,0,0,0.05);
+            padding: 15px; border-radius: 12px;
+            margin-top: 20px; text-align: right;
+            min-height: 100px; max-height: 300px;
+            overflow-y: auto; white-space: pre-wrap;
+            display: none; border: 1px solid rgba(0,0,0,0.1);
+        }
+
+        .loader {
+            display: none;
+            margin: 20px auto;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--primary);
+            border-radius: 50%;
+            width: 30px; height: 30px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2><i class="fas fa-book-open"></i> مستخرج النصوص</h2>
+    <p>قم برفع صورة الكتاب لاستخراج النص منها</p>
+
+    <div class="upload-area" onclick="document.getElementById('file-input').click()">
+        <i class="fas fa-cloud-upload-alt" style="font-size: 40px; color: var(--primary);"></i>
+        <p>اضغط هنا لاختيار صورة</p>
+        <input type="file" id="file-input" class="hidden" accept="image/*" onchange="previewFile()">
+    </div>
+
+    <img id="preview-img" alt="معاينة">
+    
+    <div id="loader" class="loader"></div>
+    <p id="status-text" style="font-size: 12px; color: var(--primary);"></p>
+
+    <button id="scan-btn" class="btn hidden" onclick="startOCR()">
+        <i class="fas fa-magic"></i> استخراج النص الآن
+    </button>
+
+    <div id="result-area"></div>
+
+    <button id="copy-btn" class="btn hidden" style="background: #27ae60;" onclick="copyText()">
+        <i class="fas fa-copy"></i> نسخ النص المستخرج
+    </button>
+</div>
+
+<script>
+    let tg = window.Telegram.WebApp;
+    tg.expand();
+
+    function previewFile() {
+        const file = document.getElementById('file-input').files[0];
+        const preview = document.getElementById('preview-img');
+        const scanBtn = document.getElementById('scan-btn');
+        
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                preview.src = e.target.result;
+                preview.style.display = 'block';
+                scanBtn.classList.remove('hidden');
+            }
+            reader.readAsDataURL(file);
+        }
+    }
+
+    async function startOCR() {
+        const file = document.getElementById('file-input').files[0];
+        const status = document.getElementById('status-text');
+        const loader = document.getElementById('loader');
+        const resultArea = document.getElementById('result-area');
+        const copyBtn = document.getElementById('copy-btn');
+
+        if (!file) return;
+
+        loader.style.display = 'block';
+        status.innerText = "جارٍ التعرف على النص (قد يستغرق لحظات)...";
+        resultArea.style.display = 'none';
+
+        try {
+            // استخدام Tesseract لمعالجة اللغة العربية والانجليزية
+            const result = await Tesseract.recognize(file, 'ara+eng', {
+                logger: m => {
+                    if(m.status === 'recognizing text') {
+                        status.innerText = `جاري القراءة: ${Math.round(m.progress * 100)}%`;
+                    }
+                }
+            });
+
+            loader.style.display = 'none';
+            status.innerText = "تم بنجاح! ✅";
+            resultArea.innerText = result.data.text;
+            resultArea.style.display = 'block';
+            copyBtn.classList.remove('hidden');
+        } catch (e) {
+            loader.style.display = 'none';
+            status.innerText = "حدث خطأ أثناء القراءة ❌";
+            console.error(e);
+        }
+    }
+
+    function copyText() {
+        const text = document.getElementById('result-area').innerText;
+        navigator.clipboard.writeText(text);
+        tg.showAlert("تم نسخ النص إلى الحافظة! ✅");
+    }
+</script>
+</body>
+  </html>
