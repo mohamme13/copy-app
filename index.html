@@ -3,11 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ماسح الكتب الاحترافي</title>
+    <title>ماسح الكتب الاحترافي - نسخة الدقة العالية</title>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     
     <style>
@@ -16,27 +15,29 @@
         body { font-family: 'Cairo', sans-serif; background-color: var(--bg); color: var(--text); margin: 0; padding: 15px; display: flex; justify-content: center; }
         .container { width: 100%; max-width: 450px; background: var(--card-bg); border-radius: 20px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); text-align: center; }
         .upload-area { border: 2px dashed var(--primary); border-radius: 15px; padding: 30px; margin: 20px 0; cursor: pointer; }
-        #preview-img { max-width: 100%; border-radius: 10px; margin-top: 15px; display: none; border: 1px solid #ccc; }
+        #preview-img { max-width: 100%; border-radius: 10px; margin-top: 15px; display: none; border: 1px solid #ccc; filter: grayscale(100%) contrast(150%); }
         .btn { background: var(--primary); color: white; border: none; padding: 15px; border-radius: 12px; cursor: pointer; width: 100%; font-size: 17px; font-weight: bold; margin-top: 10px; display: flex; justify-content: center; align-items: center; gap: 10px; }
-        #result-area { background: rgba(0,0,0,0.05); padding: 15px; border-radius: 12px; margin-top: 20px; text-align: right; min-height: 100px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; display: none; border: 1px solid rgba(0,0,0,0.1); font-size: 14px; }
+        #result-area { background: rgba(0,0,0,0.05); padding: 15px; border-radius: 12px; margin-top: 20px; text-align: right; min-height: 100px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; display: none; border: 1px solid rgba(0,0,0,0.1); font-size: 15px; line-height: 1.6; }
         .progress-container { width: 100%; background: #eee; border-radius: 10px; margin: 15px 0; display: none; }
         .progress-bar { width: 0%; height: 10px; background: var(--primary); border-radius: 10px; transition: width 0.3s; }
         .hidden { display: none !important; }
+        canvas { display: none; } /* كانفاس مخفي لمعالجة الصورة */
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2><i class="fas fa-eye"></i> مستخرج النصوص الذكي</h2>
-    <p style="font-size: 13px;">ملاحظة: المرة الأولى قد تستغرق دقيقة لتحميل ملفات اللغة العربية.</p>
+    <h2><i class="fas fa-microchip"></i> الماسح الذكي المطور</h2>
+    <p style="font-size: 12px; opacity: 0.8;">تم إضافة معالج التباين الرقمي لتحسين دقة الحروف العربية.</p>
 
     <div class="upload-area" onclick="document.getElementById('file-input').click()">
-        <i class="fas fa-camera" style="font-size: 40px; color: var(--primary);"></i>
-        <p>التقط صورة أو اختر من المعرض</p>
+        <i class="fas fa-camera-retro" style="font-size: 40px; color: var(--primary);"></i>
+        <p>التقط صورة واضحة للكتاب</p>
         <input type="file" id="file-input" class="hidden" accept="image/*" onchange="previewFile()">
     </div>
 
     <img id="preview-img">
+    <canvas id="processing-canvas"></canvas>
     
     <div id="progress-container" class="progress-container">
         <div id="progress-bar" class="progress-bar"></div>
@@ -44,13 +45,13 @@
     <p id="status-text" style="font-size: 12px; color: var(--primary); font-weight: bold;"></p>
 
     <button id="scan-btn" class="btn hidden" onclick="startOCR()">
-        <i class="fas fa-search"></i> استخراج النص الآن
+        <i class="fas fa-magic"></i> معالجة واستخراج النص
     </button>
 
     <div id="result-area"></div>
 
     <button id="copy-btn" class="btn hidden" style="background: #27ae60;" onclick="copyText()">
-        <i class="fas fa-copy"></i> نسخ النص
+        <i class="fas fa-copy"></i> نسخ النص النهائي
     </button>
 </div>
 
@@ -72,51 +73,75 @@
         }
     }
 
+    // دالة المعالجة الرقمية لتحسين الصورة قبل القراءة
+    async function preprocessImage(imageElement) {
+        const canvas = document.getElementById('processing-canvas');
+        const ctx = canvas.getContext('2d');
+        
+        canvas.width = imageElement.naturalWidth;
+        canvas.height = imageElement.naturalHeight;
+        
+        // رسم الصورة
+        ctx.drawImage(imageElement, 0, 0);
+        
+        // تطبيق تأثيرات التباين والتحويل للرمادي
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        
+        for (let i = 0; i < data.length; i += 4) {
+            // تحويل للرمادي
+            let avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+            // زيادة التباين (thresholding بسيط)
+            let val = avg > 128 ? 255 : 0; 
+            data[i] = data[i + 1] = data[i + 2] = val;
+        }
+        
+        ctx.putImageData(imageData, 0, 0);
+        return canvas.toDataURL('image/png');
+    }
+
     async function startOCR() {
-        const file = document.getElementById('file-input').files[0];
+        const previewImg = document.getElementById('preview-img');
         const status = document.getElementById('status-text');
         const progressContainer = document.getElementById('progress-container');
         const progressBar = document.getElementById('progress-bar');
         const resultArea = document.getElementById('result-area');
 
-        if (!file) return;
-
         progressContainer.style.display = 'block';
-        status.innerText = "جاري تحميل المحرك وملفات اللغة العربية...";
-        resultArea.style.display = 'none';
+        status.innerText = "جاري تحسين جودة الصورة رقمياً...";
+
+        // 1. معالجة الصورة أولاً لتحسين الدقة
+        const processedImage = await preprocessImage(previewImg);
 
         try {
-            // استخدام الوظيفة المبسطة مع تحديد اللغات
-            const { data: { text } } = await Tesseract.recognize(file, 'ara+eng', {
+            // 2. البدء باستخراج النص باستخدام المحرك
+            const { data: { text } } = await Tesseract.recognize(processedImage, 'ara+eng', {
+                workerBlobURL: false,
                 logger: m => {
                     if (m.status === 'recognizing text') {
                         let p = Math.round(m.progress * 100);
                         progressBar.style.width = p + '%';
-                        status.innerText = `جاري استخراج النص: ${p}%`;
-                    } else {
-                        status.innerText = "جاري تهيئة الملفات... " + m.status;
+                        status.innerText = `جاري التعرف على الحروف: ${p}%`;
                     }
                 }
             });
 
-            status.innerText = "تمت العملية بنجاح! ✅";
+            status.innerText = "تم الاستخراج بنجاح! ✅";
             progressContainer.style.display = 'none';
-            resultArea.innerText = text.trim() ? text : "لم يتم العثور على نص واضح في الصورة.";
+            resultArea.innerText = text.trim();
             resultArea.style.display = 'block';
             document.getElementById('copy-btn').classList.remove('hidden');
         } catch (e) {
-            status.innerText = "فشلت العملية. تأكد من جودة الإنترنت وحاول مجدداً. ❌";
-            console.error(e);
+            status.innerText = "خطأ: حاول تصوير النص بشكل أقرب وأوضح. ❌";
         }
     }
 
     function copyText() {
         const text = document.getElementById('result-area').innerText;
         navigator.clipboard.writeText(text).then(() => {
-            tg.showAlert("تم النسخ بنجاح! 📋");
+            tg.showAlert("تم نسخ النص! يمكنك الآن لصقه في أي مكان.");
         });
     }
 </script>
 </body>
-</html>
-
+        </html>
